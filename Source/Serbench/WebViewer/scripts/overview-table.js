@@ -1,25 +1,21 @@
 $(function () {
 
-    var table = createOverviewTable();
+    var data = WAVE.arrayWalkable(window.data_TestRunData);
+    var table = createOverviewTable(data);
     var container = $("#overview-table")[0];
     container.appendChild(table);
 });
 
-function createOverviewTable() {
+function createOverviewTable(data) {
 
-    // create table
     var table = document.createElement('table');
-
-    // create table header
-    var headerInfo = createTableHeader(table);
-
-    // create table body
-    createTableRows(table, headerInfo);
+    var headerInfo = createTableHeader(data, table);
+    createTableRows(data, table, headerInfo);
 
     return table;
 };
 
-function createTableHeader(table) {
+function createTableHeader(data, table) {
 
     // create header row, append 1st empty cell
     var thead = document.createElement('thead');
@@ -30,8 +26,7 @@ function createTableHeader(table) {
     var headerInfo = [];
 
     // create other header cells
-    WAVE.arrayWalkable(data)
-        .wSelect(function (e) { return getColumnHeaderData(e); })
+    data.wSelect(function (e) { return getColumnHeaderData(e); })
         .wDistinct(function (a, b) { return a.serializerType == b.serializerType && a.serializerName == b.serializerName; })
         .wEach(function (h) {
             // insert column header cell
@@ -48,12 +43,11 @@ function createTableHeader(table) {
     return headerInfo;
 }
 
-function createTableRows(table, headerInfo) {
+function createTableRows(data, table, headerInfo) {
 
     var tbody = document.createElement('tbody');
 
-    WAVE.arrayWalkable(data)
-        .wSelect(function (e) { return getRowHeaderData(e); })
+    data.wSelect(function (e) { return getRowHeaderData(e); })
         .wDistinct(function (a, b) { return a.testType == b.testType && a.testName == b.testName; })
         .wEach(function (r) {
             // create row, insert first cell (row header)
@@ -64,7 +58,7 @@ function createTableRows(table, headerInfo) {
             tr.appendChild(th);
             // fill table cells
             WAVE.arrayWalkable(headerInfo)
-                .wEach(function (h) { createTableCell(tr, r, h); });
+                .wEach(function (h) { createTableCell(data, tr, r, h); });
 
             tbody.appendChild(tr);
         });
@@ -72,15 +66,55 @@ function createTableRows(table, headerInfo) {
     table.appendChild(tbody);
 }
 
-function createTableCell(tr, rowInfo, headerInfo) {
+function createTableCell(data, tr, rowInfo, headerInfo) {
 
-    var benchTest = WAVE.arrayWalkable(data)
-                        .wFirst(function (t) {
+    // seek for all tests with the same column's and row's header data
+    var benchTests = data.wWhere(function (t) {
                             return t.TestType == rowInfo.testType &&
                                     t.TestName == rowInfo.testName &&
                                     t.SerializerType == headerInfo.serializerType &&
                                     t.SerializerName == headerInfo.serializerName;
                         });
+
+    var td = document.createElement('td');
+
+    // if there is no test - fill cell with empty (gray) space
+    if (!benchTests.wAny()) {
+        td.innerHTML = "<div class=\"absent-test\"></div>";
+        tr.appendChild(td);
+        return;
+    }
+
+    var benchTest = benchTests.wFirst();
+
+    // if there are many tests, calculate avarage data
+    var count = benchTests.wCount();
+    if (count > 1) {
+        benchTests.wSkip(1).wEach(function (t) {
+            benchTest.RunNumber += t.RunNumber;
+            benchTest.PayloadSize += t.PayloadSize;
+            benchTest.SerIterations += t.SerIterations;
+            benchTest.SerExceptions += t.SerExceptions;
+            benchTest.SerAborts += t.SerAborts;
+            benchTest.SerDurationMs += t.SerDurationMs;
+            benchTest.SerDurationTicks += t.SerDurationTicks;
+            benchTest.SerOpsSec += t.SerOpsSec;
+            benchTest.DeserIterations += t.DeserIterations;
+            benchTest.DeserExceptions += t.DeserExceptions;
+            benchTest.DeserAborts += t.DeserAborts;
+            benchTest.DeserDurationMs += t.DeserDurationMs;
+            benchTest.DeserDurationTicks += t.DeserDurationTicks;
+            benchTest.DeserOpsSec += t.DeserOpsSec;
+        });
+        benchTest.SerDurationTicks /= count;
+        benchTest.SerDurationMs = benchTest.SerDurationTicks / 1000;
+        benchTest.SerOpsSec /= count;
+        benchTest.DeserDurationTicks /= count;
+        benchTest.DeserDurationMs = benchTest.DeserDurationTicks / 1000;
+        benchTest.DeserOpsSec /= count;
+    }
+
+    // populate cell with data
 
     var serClass;
     if (JSON.parse(benchTest.SerSupported)) serClass = "supported";
@@ -89,7 +123,6 @@ function createTableCell(tr, rowInfo, headerInfo) {
     if (JSON.parse(benchTest.DeserSupported)) deserClass = "supported";
     else deserClass = "unsupported";
 
-    var td = document.createElement('td');
     var htmlTemplate =
         "<div class=\"overview-table-cell\">" +
             "<div>" +

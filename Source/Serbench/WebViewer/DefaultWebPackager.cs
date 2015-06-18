@@ -40,8 +40,8 @@ namespace Serbench.WebViewer
      protected virtual string DoCreateTargetDir(string rootPath)
      {
         var targetDir = Path.Combine(rootPath, "web");
-        NFX.IOMiscUtils.EnsureAccessibleDirectory(targetDir);
-        return targetDir;
+			  NFX.IOMiscUtils.EnsureAccessibleDirectory(targetDir);
+			  return targetDir;
      }
 
      protected virtual void DoAddResources(string path)
@@ -50,18 +50,21 @@ namespace Serbench.WebViewer
         AddStockScriptResource(path, "wv.js");
         AddStockScriptResource(path, "wv.gui.js");
         AddStockScriptResource(path, "wv.chart.svg.js");
-       
-        File.WriteAllText(Path.Combine(path, "default.css"), typeof(DefaultWebPackager).GetText("default.css"));
+
+				File.WriteAllText(Path.Combine(path, "default.css"), typeof(DefaultWebPackager).GetText(@"styles.default.css"));
+				File.WriteAllText(Path.Combine(path, "chart.css"), typeof(DefaultWebPackager).GetText(@"styles.chart.css"));
+				File.WriteAllText(Path.Combine(path, "overview-table.css"), typeof(DefaultWebPackager).GetText(@"styles.overview-table.css"));
+				File.WriteAllText(Path.Combine(path, "chart.js"), typeof(DefaultWebPackager).GetText(@"scripts.chart.js"));
+				File.WriteAllText(Path.Combine(path, "overview-table.js"), typeof(DefaultWebPackager).GetText(@"scripts.overview-table.js"));
      }
 
      protected virtual void DoGeneratePages(string path)
      {
         var target = new NFX.Templatization.StringRenderingTarget(false);
         new Index().Render(target, null);
-        File.WriteAllText(Path.Combine(path, "index.htm"), target.Value); 
-       
-
-     }
+        File.WriteAllText(Path.Combine(path, "index.htm"), target.Value);
+			  File.WriteAllText(Path.Combine(path, "overviewreport.html"), typeof(DefaultWebPackager).GetText(@"views.OverviewReport.html"));
+		}
 
      /// <summary>
      /// Copies a named stock script into the output path
