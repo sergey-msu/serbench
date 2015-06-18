@@ -11,6 +11,7 @@ function createOverviewTable(data) {
     var table = document.createElement('table');
     var headerInfo = createTableHeader(data, table);
     createTableRows(data, table, headerInfo);
+    table.className = 'main-table';
 
     return table;
 };
@@ -53,6 +54,7 @@ function createTableRows(data, table, headerInfo) {
             // create row, insert first cell (row header)
             var tr = document.createElement('tr');
             var th = document.createElement('th');
+            th.className = 'main-table-row-header';
             var htmlTemplate = "<b>@testType@<br>@testName@</b>";
             th.innerHTML = WAVE.strHTMLTemplate(htmlTemplate, { testType: r.testType, testName: r.testName });
             tr.appendChild(th);
@@ -70,17 +72,17 @@ function createTableCell(data, tr, rowInfo, headerInfo) {
 
     // seek for all tests with the same column's and row's header data
     var benchTests = data.wWhere(function (t) {
-                            return t.TestType == rowInfo.testType &&
-                                    t.TestName == rowInfo.testName &&
-                                    t.SerializerType == headerInfo.serializerType &&
-                                    t.SerializerName == headerInfo.serializerName;
-                        });
+        return t.TestType == rowInfo.testType &&
+                t.TestName == rowInfo.testName &&
+                t.SerializerType == headerInfo.serializerType &&
+                t.SerializerName == headerInfo.serializerName;
+    });
 
     var td = document.createElement('td');
 
     // if there is no test - fill cell with empty (gray) space
     if (!benchTests.wAny()) {
-        td.innerHTML = "<div class=\"absent-test\"></div>";
+        td.className = 'absent-test';
         tr.appendChild(td);
         return;
     }

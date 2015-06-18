@@ -64,9 +64,6 @@
     <Compile Include="Tests\TypicalPerson.cs" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="..\Serbench\Serbench.csproj">
       <Project>{2da28c3b-6250-41ca-91a0-3a9045b473ac}</Project>
       <Name>Serbench</Name>
