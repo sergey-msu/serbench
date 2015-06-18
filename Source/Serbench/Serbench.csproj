@@ -45,8 +45,10 @@
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Xml" />
+    <Reference Include="System.Xml.Serialization" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BaseTypes.cs" />
@@ -54,6 +56,9 @@
     <Compile Include="Data\ITestDataStore.cs" />
     <Compile Include="Exceptions.cs" />
     <Compile Include="Serializer.cs" />
+    <Compile Include="SerializerInfo.cs" />
+    <Compile Include="StockSerializers\MSXmlSerializer.cs" />
+    <Compile Include="StockSerializers\MSDataContractSerializer.cs" />
     <Compile Include="StockSerializers\NFXJson.cs" />
     <Compile Include="StockSerializers\MSBinaryFormatter.cs" />
     <Compile Include="StockSerializers\NFXSlim.cs" />

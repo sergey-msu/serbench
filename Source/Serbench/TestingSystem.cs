@@ -23,8 +23,10 @@ namespace Serbench
     {
       #region CONSTS
 
+        public const string CONFIG_TESTS_SECTION = "tests";
+        public const string CONFIG_SERIALIZERS_SECTION = "serializers";
         public const string CONFIG_TEST_SECTION = "test";
-        public const string CONFIG_SER_SECTION = "serializer";
+        public const string CONFIG_SERIALIZER_SECTION = "serializer";
 
         public const int DEFAULT_STREAM_CAPACITY = 64 * 1024 * 1024;
         public const int MIN_STREAM_CAPACITY = 32 * 1024;
@@ -100,19 +102,26 @@ namespace Serbench
         {
           base.DoConfigure(node);
 
-          foreach(var tnode in node.Children.Where(cn => cn.IsSameName(CONFIG_TEST_SECTION)))
+          foreach(var tnode in node[CONFIG_TESTS_SECTION].Children.Where(cn => cn.IsSameName(CONFIG_TEST_SECTION)))
           {
             var item = FactoryUtils.Make<Test>(tnode, args: new object[]{this, tnode});
             m_Tests.Register( item );
             log(MessageType.Info, "conf tests", "Added test {0}.'{1}'[{2}]".Args(item.GetType().FullName, item.Name, item.Order));
           }
 
-          foreach(var snode in node.Children.Where(cn => cn.IsSameName(CONFIG_SER_SECTION)))
+          if (m_Tests.Count==0)
+           throw new SerbenchException("No test specified in config. Nothing to do");
+
+
+          foreach(var snode in node[CONFIG_SERIALIZERS_SECTION].Children.Where(cn => cn.IsSameName(CONFIG_SERIALIZER_SECTION)))
           {
             var item = FactoryUtils.Make<Serializer>(snode, args: new object[]{this, snode});
             m_Serializers.Register( item  );
             log(MessageType.Info, "conf sers", "Added serializer {0}.'{1}'[{2}]".Args(item.GetType().FullName, item.Name, item.Order));
           }
+
+          if (m_Serializers.Count==0)
+           throw new SerbenchException("No serializers specified in config. Nothing to do");
         }
 
         protected override void DoStart()
@@ -157,6 +166,19 @@ namespace Serbench
 
         private void threadBody()
         {
+          try
+          {
+            threadBodyCore();
+          }
+          catch(Exception error)
+          {
+            log(MessageType.CatastrophicError, "threadBody()", "Thread crashed as it leaked exception: "+error.ToMessageWithType(), error);
+          }
+        }
+
+        private void threadBodyCore()
+        {
+           
            using(var targetStream = new MemoryStream( StreamCapacity ))//pre-allocate large space so it is not likely to resize and skew test results
            {
                foreach(var serializer in m_Serializers.OrderedValues)
@@ -167,11 +189,25 @@ namespace Serbench
                   foreach(var test in m_Tests.OrderedValues)
                   {
                       if (!Running) break;
+                      
                       log(MessageType.Info, test.Name, "Starting Test with {0} runs".Args(test.Runs));
+
+                      test.ResetAbort();
+                      serializer.BeforeRuns(test);
+                      if (test.Aborted)
+                      {
+                        continue;//todo return result into aborted tests dataset
+                      }
+                      test.BeforeRuns(serializer);
+                      if (test.Aborted)
+                      {
+                        continue;//todo return result into aborted tests dataset
+                      }
 
                       for(var i=0; Running && i<test.Runs; i++)
                       {
                           if (test.DoGc) GC.Collect(2);
+                          test.ResetAbort();
                           var data = doTestRun(i, serializer, test, targetStream);
                           DataStore.SaveTestData( data );
                       }//runs
@@ -180,9 +216,9 @@ namespace Serbench
            }
 
            if (!Running)
-            log(MessageType.Warning, "threadBody()", "Service stopping but test has not finished yet");
+            log(MessageType.Warning, "threadBodyCore()", "Service stopping but test has not finished yet");
 
-           log(MessageType.Info, "threadBody()", "Thread exiting");
+           log(MessageType.Info, "threadBodyCore()", "Thread exiting");
            
            SignalStop();
         }
@@ -219,11 +255,12 @@ namespace Serbench
 
         private void invokeTests(TestRunData result, Serializer serializer, Test test, MemoryStream targetStream)
         {
-           const int ERROR_CUTOFF = 5;
+           const int ERROR_CUTOFF = 3;
+
+           const int ABORT_CUTOFF = 16;
 
            var streamWrap = new NFX.IO.NonClosingStreamWrap( targetStream );
 
-           
 
            var serExceptions = 0;
            var wasOk = false;
@@ -239,13 +276,26 @@ namespace Serbench
              try
              {
                test.PerformSerializationTest( serializer, streamWrap );
+               if (test.Aborted)
+               {
+                 result.SerAborts++;
+                 result.FirstSerAbortMsg = test.AbortMessage;
+                 test.ResetAbort();
+                 if (result.SerAborts==ABORT_CUTOFF)
+                 {
+                  i = test.SerIterations;
+                  throw new SerbenchException("Too many aborts {0}. Iterations run interrupted".Args(result.SerAborts));
+                 }
+
+                 continue;
+               }
                wasOk = true;
              }
              catch(Exception error)
              {
                serExceptions++;
                log(MessageType.Error, "Serilizing '{0}'-'{1}'".Args(serializer.Name, test.Name), error.ToMessageWithType(), error);
-               if (!wasOk && serExceptions>ERROR_CUTOFF)
+               if (!wasOk && serExceptions==ERROR_CUTOFF)
                {
                  result.SerExceptions = serExceptions;
                  result.SerSupported = false;
@@ -256,13 +306,16 @@ namespace Serbench
            }
 
            sw.Stop();
-           result.SerSupported = true;
+           result.SerSupported = wasOk;
            result.SerExceptions = serExceptions;
            result.PayloadSize = (int)targetStream.Position;
            result.SerIterations = test.SerIterations;
            result.SerDurationMs = sw.ElapsedMilliseconds;
            if ((result.SerDurationTicks = sw.ElapsedTicks) > 0)
              result.SerOpsSec = (int)( test.SerIterations / ((double)result.SerDurationTicks / (double)TimeSpan.TicksPerSecond) );
+
+           if (!result.SerSupported)
+            throw new SerbenchException("Test run failed as serialization not supported");
 
            if (result.SerIterations==0)
             throw new SerbenchException("Test run failed as nothing was serialized. Test must be configured with at least 1 serialization iteration to succeed");
@@ -287,13 +340,25 @@ namespace Serbench
              try
              {
                test.PerformDeserializationTest( serializer, readingStreamSegment );
+               if (test.Aborted)
+               {
+                 result.DeserAborts++;
+                 result.FirstDeserAbortMsg = test.AbortMessage;
+                 test.ResetAbort();
+                 if (result.DeserAborts==ABORT_CUTOFF)
+                 {
+                  i = test.DeserIterations;
+                  throw new SerbenchException("Too many aborts {0}. Iterations run interrupted".Args(result.DeserAborts));
+                 }
+                 continue;
+               }
                wasOk = true;
              }
              catch(Exception error)
              {
                deserExceptions++;
                log(MessageType.Error, "Deserilizing '{0}'-'{1}'".Args(serializer.Name, test.Name), error.ToMessageWithType(), error);
-               if (!wasOk && deserExceptions>ERROR_CUTOFF)
+               if (!wasOk && deserExceptions==ERROR_CUTOFF)
                {
                  result.DeserExceptions = deserExceptions;
                  result.DeserSupported = false;
@@ -304,7 +369,7 @@ namespace Serbench
            }
                 
            sw.Stop();
-           result.DeserSupported = true;
+           result.DeserSupported = wasOk;
            result.DeserIterations = test.DeserIterations;
            result.DeserDurationMs = sw.ElapsedMilliseconds;
            if ((result.DeserDurationTicks = sw.ElapsedTicks) > 0)

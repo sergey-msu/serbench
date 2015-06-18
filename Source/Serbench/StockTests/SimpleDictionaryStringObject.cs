@@ -38,6 +38,11 @@ namespace Serbench.StockTests
     public int KeyLength{ get{ return m_KeyLength;}}
 
 
+    public override Type GetPayloadRootType()
+    {
+      return m_Dict.GetType();
+    }
+
     public override void PerformSerializationTest(Serializer serializer, Stream target)
     {
       serializer.Serialize(m_Dict, target);
@@ -46,8 +51,8 @@ namespace Serbench.StockTests
     public override void PerformDeserializationTest(Serializer serializer, Stream target)
     {
       var got = serializer.Deserialize(target) as Dictionary<string, object>;
-      if (got==null){ Abort("Did not get dict back"); return; }
-      if (got.Count!=m_Dict.Count){ Abort("Did not get same count"); return;}
+      if (got==null){ Abort(serializer, "Did not get dict back"); return; }
+      if (got.Count!=m_Dict.Count){ Abort(serializer, "Did not get same count"); return;}
 
     }
 

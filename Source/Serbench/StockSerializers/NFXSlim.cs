@@ -16,25 +16,26 @@ namespace Serbench.StockSerializers
   /// <summary>
   /// Represents NFX.Serialization.Slim technology
   /// </summary>
+  [SerializerInfo( 
+     Family = SerializerFamily.Binary,    
+     MetadataRequirement = MetadataRequirement.None,
+     VendorName = "IT Adapter LLC",
+     VendorLicense = "Apache 2.0 + Commercial",
+     VendorURL = "http://itadapter.com",
+     VendorPackageURL = "http://github.com/aumcode/nfx",
+     FormatName = "Slim",
+     LinesOfCodeK = 7,    
+     DataTypes = 32,
+     Assemblies = 1,
+     ExternalReferences = 0,
+     PackageSizeKb = 1500
+  )]
   public class NFXSlim : Serializer
   {
-    public const string CONFIG_KNOWN_TYPE_SECTION = "known-type";
-
 
     public NFXSlim(TestingSystem context, IConfigSectionNode conf) : base(context, conf) 
     {
-      Type[] known; 
-      
-      try
-      {
-        known = conf.Children.Where(cn => cn.IsSameName(CONFIG_KNOWN_TYPE_SECTION))
-                             .Select( cn => Type.GetType( cn.AttrByName(Configuration.CONFIG_NAME_ATTR).Value, true ))
-                             .ToArray();   //force execution now
-      }
-      catch(Exception error)
-      {
-        throw new SerbenchException("Slim serializer config error in '{0}' section: {1}".Args(conf.ToLaconicString(), error.ToMessageWithType()), error);
-      }
+      Type[] known = ReadKnownTypes(conf); 
 
       //we create type registry with well-known types that serializer does not have to emit every time
       m_TypeRegistry = new TypeRegistry(TypeRegistry.BoxedCommonTypes,
@@ -100,7 +101,6 @@ namespace Serbench.StockSerializers
       //parallel mode can not use batching because it is not thread-safe
       return m_Serializer.Deserialize(stream);
     }
-
 
   }
 
